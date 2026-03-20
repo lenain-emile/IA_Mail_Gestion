@@ -2,6 +2,8 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import logger from "./utils/logger";
+import { analyzeEmail } from "./agents/reader";
+import { writeReply } from "./agents/writer";
 import { getAuthUrl, saveToken, fetchEmails } from "./tools/gmail";
 
 dotenv.config();
@@ -66,6 +68,56 @@ app.get("/mails", async (req, res) => {
   }
 });
 
+// Test — Analyser le premier mail
+app.get("/mails/analyze", async (req, res) => {
+  try {
+    const emails = await fetchEmails(1);
+
+    if (emails.length === 0) {
+      res.json({ message: "Aucun mail non lu trouvé" });
+      return;
+    }
+
+    const analysis = await analyzeEmail(emails[0]);
+    res.json({ email: emails[0], analysis });
+  } catch (error) {
+    logger.error(`Erreur analyze : ${error}`);
+    res.status(500).json({ error: String(error) });
+  }
+});
+
 app.listen(PORT, () => {
   logger.info(`Serveur démarré sur le port ${PORT}`);
+});
+
+// Test — Lire + Rédiger pour le premier mail
+app.get("/mails/draft", async (req, res) => {
+  try {
+    const emails = await fetchEmails(50);
+
+    if (emails.length === 0) {
+      res.json({ message: "Aucun mail non lu trouvé" });
+      return;
+    }
+
+    const analysis = await analyzeEmail(emails[0]);
+
+    // Le rédacteur n'intervient que si le lecteur le décide
+    if (!analysis.transmettre_au_redacteur) {
+      res.json({
+        email: emails[0],
+        analysis,
+        draft: null,
+        message: `Mail ignoré — ${analysis.raison_transmission}`,
+      });
+      return;
+    }
+
+    const draft = await writeReply(emails[0], analysis);
+    res.json({ email: emails[0], analysis, draft });
+
+  } catch (error) {
+    logger.error(`Erreur draft : ${error}`);
+    res.status(500).json({ error: String(error) });
+  }
 });

@@ -1,0 +1,8 @@
+.env
+token.json
+credentials.json
+client_secret_*.json
+
+# Build artifacts
+dist/
+node_modules/
