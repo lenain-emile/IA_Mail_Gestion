@@ -4,6 +4,8 @@ import dotenv from "dotenv";
 import logger from "./utils/logger";
 import { analyzeEmail } from "./agents/reader";
 import { writeReply } from "./agents/writer";
+import { runOrchestrator } from "./agents/orchestrator";
+import { runMigrations } from "./db/migrations";
 import { getAuthUrl, saveToken, fetchEmails } from "./tools/gmail";
 
 dotenv.config();
@@ -86,9 +88,19 @@ app.get("/mails/analyze", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  logger.info(`Serveur démarré sur le port ${PORT}`);
-});
+async function startServer() {
+  try {
+    await runMigrations();
+    app.listen(PORT, () => {
+      logger.info(`Serveur démarré sur le port ${PORT}`);
+    });
+  } catch (error) {
+    logger.error(`[SERVER] Démarrage impossible (DB/migrations) : ${error}`);
+    process.exit(1);
+  }
+}
+
+startServer();
 
 // Test — Lire + Rédiger pour le premier mail
 app.get("/mails/draft", async (req, res) => {
@@ -118,6 +130,32 @@ app.get("/mails/draft", async (req, res) => {
 
   } catch (error) {
     logger.error(`Erreur draft : ${error}`);
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+
+// Route principale — lancer une session complète
+app.post("/run", async (req, res) => {
+  try {
+    const requestedLimit = Number(req.query.limit ?? req.body?.limit ?? 50);
+    const emailLimit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(Math.floor(requestedLimit), 1), 50)
+      : 50;
+
+    logger.info(`[SERVER] Lancement d'une session orchestrateur (limit=${emailLimit})`);
+    const emails = await fetchEmails(emailLimit);
+
+    if (emails.length === 0) {
+      res.json({ message: "Aucun mail non lu trouvé" });
+      return;
+    }
+
+    const report = await runOrchestrator(emails);
+    res.json(report);
+
+  } catch (error) {
+    logger.error(`Erreur run : ${error}`);
     res.status(500).json({ error: String(error) });
   }
 });

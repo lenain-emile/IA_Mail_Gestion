@@ -32,20 +32,13 @@ export async function writeReply(
   const client = getAnthropicClient();
 
   const userMessage = `
-Email original :
-━━━━━━━━━━━━━━━
 De : ${email.from}
-Date : ${email.date}
 Sujet : ${email.subject}
-Corps : ${email.body}
-
-Analyse de l'agent lecteur :
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Type : ${analysis.type}
 Urgence : ${analysis.urgence}
 Intention : ${analysis.intention}
 Résumé : ${analysis.resume}
-Personnes détectées : ${analysis.entites.personnes.join(", ") || "aucune"}
+Personnes : ${analysis.entites.personnes.join(", ") || "aucune"}
   `.trim();
 
   try {

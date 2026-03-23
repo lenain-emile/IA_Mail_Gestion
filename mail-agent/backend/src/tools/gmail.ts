@@ -137,7 +137,7 @@ export async function fetchEmails(maxResults: number = 10) {
         subject,
         from,
         date,
-        body,
+        body: body.slice(0, 2000),
       };
     })
   );
