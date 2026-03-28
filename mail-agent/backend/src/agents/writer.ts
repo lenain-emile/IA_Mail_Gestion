@@ -22,6 +22,7 @@ export interface EmailDraft {
   ton: "formel" | "bienveillant" | "direct";
   confiance: "haute" | "moyenne" | "faible";
   note: string;
+  sent?: boolean;
 }
 
 export async function writeReply(

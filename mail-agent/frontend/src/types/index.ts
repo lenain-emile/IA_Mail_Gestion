@@ -36,6 +36,7 @@ export interface EmailDraft {
   ton: "formel" | "bienveillant" | "direct";
   confiance: "haute" | "moyenne" | "faible";
   note: string;
+  sent?: boolean;
 }
 
 export interface EmailWithAnalysis {
@@ -43,6 +44,21 @@ export interface EmailWithAnalysis {
   analysis: EmailAnalysis;
   draft?: EmailDraft | null;
   message?: string;
+}
+
+export interface SavedEmailData {
+  analysis: EmailAnalysis | null;
+  draft: EmailDraft | null;
+}
+
+export interface DraftActionResult {
+  success: boolean;
+  emailId: string;
+  draft: EmailDraft;
+  message?: string;
+  gmailMessageId?: string;
+  threadId?: string | null;
+  to?: string;
 }
 
 export interface SessionReportEntry {

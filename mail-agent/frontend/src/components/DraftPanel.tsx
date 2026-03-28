@@ -1,9 +1,25 @@
-import { PenLine, Copy, Check } from "lucide-react";
+import { PenLine, Copy, Check, Save, Send } from "lucide-react";
 import { useState } from "react";
 import Badge from "./Badge";
 import type { EmailDraft } from "../types";
 
-export default function DraftPanel({ draft }: { draft: EmailDraft }) {
+type DraftPanelProps = {
+  draft: EmailDraft;
+  onChange: (nextDraft: EmailDraft) => void;
+  onSave: () => void;
+  onSend: () => void;
+  saving: boolean;
+  sending: boolean;
+};
+
+export default function DraftPanel({
+  draft,
+  onChange,
+  onSave,
+  onSend,
+  saving,
+  sending,
+}: DraftPanelProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -11,6 +27,9 @@ export default function DraftPanel({ draft }: { draft: EmailDraft }) {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const canSave = draft.sujet.trim().length > 0 && draft.corps.trim().length > 0;
+  const isSent = Boolean(draft.sent);
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
@@ -22,12 +41,18 @@ export default function DraftPanel({ draft }: { draft: EmailDraft }) {
         <div className="flex items-center gap-2">
           <Badge value={draft.ton} />
           <Badge value={draft.confiance} />
+          {isSent && <Badge value="envoye" />}
         </div>
       </div>
 
       <div>
         <p className="text-xs text-gray-500 mb-1">Sujet</p>
-        <p className="text-sm font-medium text-gray-900">{draft.sujet}</p>
+        <input
+          value={draft.sujet}
+          onChange={(e) => onChange({ ...draft, sujet: e.target.value })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+          placeholder="Sujet de la reponse"
+        />
       </div>
 
       <div>
@@ -48,17 +73,81 @@ export default function DraftPanel({ draft }: { draft: EmailDraft }) {
             )}
           </button>
         </div>
-        <div className="bg-gray-50 p-4 rounded text-sm text-gray-700 whitespace-pre-wrap">
-          {draft.corps}
+        <textarea
+          value={draft.corps}
+          onChange={(e) => onChange({ ...draft, corps: e.target.value })}
+          rows={10}
+          className="w-full bg-gray-50 p-4 rounded border border-gray-200 text-sm text-gray-700 whitespace-pre-wrap focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+          placeholder="Corps de la reponse"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <p className="text-xs text-gray-500 mb-1">Ton</p>
+          <select
+            value={draft.ton}
+            onChange={(e) =>
+              onChange({
+                ...draft,
+                ton: e.target.value as EmailDraft["ton"],
+              })
+            }
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+          >
+            <option value="formel">formel</option>
+            <option value="bienveillant">bienveillant</option>
+            <option value="direct">direct</option>
+          </select>
+        </div>
+        <div>
+          <p className="text-xs text-gray-500 mb-1">Confiance</p>
+          <select
+            value={draft.confiance}
+            onChange={(e) =>
+              onChange({
+                ...draft,
+                confiance: e.target.value as EmailDraft["confiance"],
+              })
+            }
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+          >
+            <option value="haute">haute</option>
+            <option value="moyenne">moyenne</option>
+            <option value="faible">faible</option>
+          </select>
         </div>
       </div>
 
-      {draft.note && (
-        <div>
-          <p className="text-xs text-gray-500 mb-1">Note IA</p>
-          <p className="text-sm text-gray-600 italic">{draft.note}</p>
-        </div>
-      )}
+      <div>
+        <p className="text-xs text-gray-500 mb-1">Note IA / interne</p>
+        <textarea
+          value={draft.note}
+          onChange={(e) => onChange({ ...draft, note: e.target.value })}
+          rows={3}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+          placeholder="Notes complementaires"
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-2 pt-1">
+        <button
+          onClick={onSave}
+          disabled={!canSave || saving || sending}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-emerald-300 text-emerald-700 rounded-lg text-sm font-medium hover:bg-emerald-50 disabled:opacity-50"
+        >
+          <Save className="w-4 h-4" />
+          {saving ? "Sauvegarde..." : "Sauvegarder"}
+        </button>
+        <button
+          onClick={onSend}
+          disabled={!canSave || saving || sending || isSent}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
+        >
+          <Send className="w-4 h-4" />
+          {isSent ? "Deja envoye" : sending ? "Envoi..." : "Envoyer"}
+        </button>
+      </div>
     </div>
   );
 }

@@ -15,6 +15,7 @@ const colors: Record<string, string> = {
   bienveillant: "bg-pink-100 text-pink-700",
   direct: "bg-amber-100 text-amber-700",
   reponse_redigee: "bg-green-100 text-green-700",
+  envoye: "bg-emerald-100 text-emerald-700",
   ignore: "bg-gray-100 text-gray-600",
   erreur: "bg-red-100 text-red-700",
 };

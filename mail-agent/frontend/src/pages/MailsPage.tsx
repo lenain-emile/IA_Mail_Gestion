@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import { RefreshCw, Sparkles, PenLine } from "lucide-react";
 import type { RawEmail, EmailAnalysis, EmailDraft } from "../types";
-import { fetchEmails, analyzeEmail, draftEmail } from "../services/api";
+import {
+  fetchEmails,
+  analyzeSelectedEmail,
+  draftSelectedEmail,
+  fetchSavedEmailData,
+  saveDraftForEmail,
+  sendDraftForEmail,
+} from "../services/api";
 import EmailCard from "../components/EmailCard";
 import AnalysisPanel from "../components/AnalysisPanel";
 import DraftPanel from "../components/DraftPanel";
@@ -16,9 +23,13 @@ export default function MailsPage() {
 
   const [analysis, setAnalysis] = useState<EmailAnalysis | null>(null);
   const [draft, setDraft] = useState<EmailDraft | null>(null);
+  const [loadingSavedData, setLoadingSavedData] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [drafting, setDrafting] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [sendingDraft, setSendingDraft] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
   const loadEmails = async () => {
     setLoading(true);
@@ -29,6 +40,7 @@ export default function MailsPage() {
       setSelectedId(null);
       setAnalysis(null);
       setDraft(null);
+      setActionSuccess(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erreur de chargement");
     } finally {
@@ -40,12 +52,64 @@ export default function MailsPage() {
     loadEmails();
   }, []);
 
+  useEffect(() => {
+    if (!selectedId) {
+      return;
+    }
+
+    const currentEmailId = selectedId;
+
+    let isActive = true;
+
+    async function loadSavedDataForSelection() {
+      setLoadingSavedData(true);
+      setActionError(null);
+      setActionSuccess(null);
+      setAnalysis(null);
+      setDraft(null);
+
+      try {
+        const data = await fetchSavedEmailData(currentEmailId);
+        if (!isActive) {
+          return;
+        }
+        setAnalysis(data.analysis);
+        setDraft(data.draft);
+      } catch (e) {
+        if (!isActive) {
+          return;
+        }
+        setActionError(
+          e instanceof Error
+            ? e.message
+            : "Erreur lors du chargement des donnees sauvegardees",
+        );
+      } finally {
+        if (isActive) {
+          setLoadingSavedData(false);
+        }
+      }
+    }
+
+    loadSavedDataForSelection();
+
+    return () => {
+      isActive = false;
+    };
+  }, [selectedId]);
+
   const handleAnalyze = async () => {
+    if (!selected) {
+      setActionError("Selectionnez un mail avant de lancer l'analyse.");
+      return;
+    }
+
     setAnalyzing(true);
     setActionError(null);
+    setActionSuccess(null);
     setDraft(null);
     try {
-      const data = await analyzeEmail();
+      const data = await analyzeSelectedEmail(selected);
       setAnalysis(data.analysis);
     } catch (e) {
       setActionError(
@@ -57,12 +121,21 @@ export default function MailsPage() {
   };
 
   const handleDraft = async () => {
+    if (!selected) {
+      setActionError("Selectionnez un mail avant de lancer la redaction.");
+      return;
+    }
+
     setDrafting(true);
     setActionError(null);
+    setActionSuccess(null);
     try {
-      const data = await draftEmail();
+      const data = await draftSelectedEmail(selected);
       setAnalysis(data.analysis);
       setDraft(data.draft ?? null);
+      if (data.draft) {
+        setActionSuccess("Brouillon genere. Vous pouvez le modifier, sauvegarder puis envoyer.");
+      }
     } catch (e) {
       setActionError(
         e instanceof Error ? e.message : "Erreur lors de la redaction",
@@ -73,6 +146,58 @@ export default function MailsPage() {
   };
 
   const selected = emails.find((e) => e.id === selectedId);
+
+  const handleDraftChange = (nextDraft: EmailDraft) => {
+    setDraft(nextDraft);
+    setActionSuccess(null);
+  };
+
+  const handleSaveDraft = async () => {
+    if (!selected || !draft) {
+      setActionError("Aucun brouillon a sauvegarder pour ce mail.");
+      return;
+    }
+
+    setSavingDraft(true);
+    setActionError(null);
+    setActionSuccess(null);
+
+    try {
+      const result = await saveDraftForEmail(selected, draft);
+      setDraft(result.draft);
+      setActionSuccess(result.message || "Brouillon sauvegarde");
+    } catch (e) {
+      setActionError(
+        e instanceof Error ? e.message : "Erreur lors de la sauvegarde du brouillon",
+      );
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
+  const handleSendDraft = async () => {
+    if (!selected || !draft) {
+      setActionError("Aucun brouillon a envoyer pour ce mail.");
+      return;
+    }
+
+    setSendingDraft(true);
+    setActionError(null);
+    setActionSuccess(null);
+
+    try {
+      const result = await sendDraftForEmail(selected, draft);
+      setDraft(result.draft);
+      setActionSuccess(
+        result.message ||
+          `Reponse envoyee${result.to ? ` a ${result.to}` : ""}`,
+      );
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Erreur lors de l'envoi");
+    } finally {
+      setSendingDraft(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -120,6 +245,7 @@ export default function MailsPage() {
                   setAnalysis(null);
                   setDraft(null);
                   setActionError(null);
+                  setActionSuccess(null);
                 }}
               />
             ))}
@@ -152,7 +278,7 @@ export default function MailsPage() {
                 <div className="flex gap-3">
                   <button
                     onClick={handleAnalyze}
-                    disabled={analyzing || drafting}
+                    disabled={!selected || analyzing || drafting || savingDraft || sendingDraft}
                     className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50"
                   >
                     <Sparkles
@@ -162,7 +288,7 @@ export default function MailsPage() {
                   </button>
                   <button
                     onClick={handleDraft}
-                    disabled={analyzing || drafting}
+                    disabled={!selected || analyzing || drafting || savingDraft || sendingDraft}
                     className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50"
                   >
                     <PenLine
@@ -173,6 +299,14 @@ export default function MailsPage() {
                 </div>
 
                 {actionError && <ErrorAlert message={actionError} />}
+                {actionSuccess && (
+                  <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg p-4 text-sm">
+                    {actionSuccess}
+                  </div>
+                )}
+                {loadingSavedData && (
+                  <LoadingSpinner message="Chargement des donnees sauvegardees..." />
+                )}
                 {analyzing && (
                   <LoadingSpinner message="L'IA analyse votre mail..." />
                 )}
@@ -180,8 +314,25 @@ export default function MailsPage() {
                   <LoadingSpinner message="L'IA redige une reponse..." />
                 )}
 
+                {!loadingSavedData && !analyzing && !drafting && !analysis && !draft && (
+                  <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg p-4 text-sm">
+                    Aucune analyse ou brouillon sauvegarde pour ce mail.
+                    Lancez une session orchestrateur pour enregistrer automatiquement
+                    l'analyse et la reponse en base.
+                  </div>
+                )}
+
                 {analysis && !analyzing && <AnalysisPanel analysis={analysis} />}
-                {draft && !drafting && <DraftPanel draft={draft} />}
+                {draft && !drafting && (
+                  <DraftPanel
+                    draft={draft}
+                    onChange={handleDraftChange}
+                    onSave={handleSaveDraft}
+                    onSend={handleSendDraft}
+                    saving={savingDraft}
+                    sending={sendingDraft}
+                  />
+                )}
               </>
             )}
           </div>

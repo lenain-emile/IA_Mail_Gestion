@@ -145,6 +145,108 @@ export async function fetchEmails(maxResults: number = 10) {
   return emails;
 }
 
+function getHeaderValue(
+  headers: Array<{ name?: string | null; value?: string | null }> | undefined,
+  headerName: string
+): string {
+  if (!headers) {
+    return "";
+  }
+
+  const found = headers.find(
+    (h) => (h.name || "").toLowerCase() === headerName.toLowerCase()
+  );
+
+  return found?.value || "";
+}
+
+function extractEmailAddress(fromHeader: string): string {
+  const angleMatch = fromHeader.match(/<([^>]+)>/);
+  if (angleMatch?.[1]) {
+    return angleMatch[1].trim();
+  }
+
+  const rawMatch = fromHeader.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  if (rawMatch?.[0]) {
+    return rawMatch[0].trim();
+  }
+
+  throw new Error(`Impossible d'extraire une adresse email depuis: ${fromHeader}`);
+}
+
+function normalizeReplySubject(subject: string): string {
+  const clean = (subject || "").trim() || "(sans sujet)";
+  return /^re:/i.test(clean) ? clean : `Re: ${clean}`;
+}
+
+function toBase64Url(value: string): string {
+  return Buffer.from(value, "utf-8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+export async function sendReplyToMessage(params: {
+  originalMessageId: string;
+  replySubject: string;
+  replyBody: string;
+}): Promise<{ gmailMessageId: string; threadId: string | null; to: string }> {
+  const auth = getAuthenticatedClient();
+  const gmail = google.gmail({ version: "v1", auth });
+
+  const original = await gmail.users.messages.get({
+    userId: "me",
+    id: params.originalMessageId,
+    format: "metadata",
+    metadataHeaders: ["From", "Subject", "Message-ID", "References"],
+  });
+
+  const headers = original.data.payload?.headers;
+  const fromHeader = getHeaderValue(headers, "From");
+  const subjectHeader = getHeaderValue(headers, "Subject");
+  const messageIdHeader = getHeaderValue(headers, "Message-ID");
+  const referencesHeader = getHeaderValue(headers, "References");
+
+  const to = extractEmailAddress(fromHeader);
+  const subject = normalizeReplySubject(params.replySubject || subjectHeader);
+  const references = [referencesHeader, messageIdHeader].filter(Boolean).join(" ").trim();
+  const body = (params.replyBody || "").replace(/\r?\n/g, "\r\n");
+
+  const lines = [
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    "MIME-Version: 1.0",
+    'Content-Type: text/plain; charset="UTF-8"',
+  ];
+
+  if (messageIdHeader) {
+    lines.push(`In-Reply-To: ${messageIdHeader}`);
+  }
+
+  if (references) {
+    lines.push(`References: ${references}`);
+  }
+
+  const mimeMessage = [...lines, "", body].join("\r\n");
+
+  const sendResponse = await gmail.users.messages.send({
+    userId: "me",
+    requestBody: {
+      raw: toBase64Url(mimeMessage),
+      threadId: original.data.threadId || undefined,
+    },
+  });
+
+  logger.info(`[GMAIL] Réponse envoyée pour message ${params.originalMessageId}`);
+
+  return {
+    gmailMessageId: sendResponse.data.id || "",
+    threadId: sendResponse.data.threadId || original.data.threadId || null,
+    to,
+  };
+}
+
 // Extraire le texte du corps du mail
 function extractBody(payload: any): string {
   if (!payload) return "";

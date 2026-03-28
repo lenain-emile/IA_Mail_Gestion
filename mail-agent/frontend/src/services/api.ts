@@ -1,4 +1,11 @@
-import type { RawEmail, EmailWithAnalysis, OrchestratorReport } from "../types";
+import type {
+  RawEmail,
+  EmailWithAnalysis,
+  OrchestratorReport,
+  SavedEmailData,
+  EmailDraft,
+  DraftActionResult,
+} from "../types";
 
 const BASE = "/api";
 
@@ -42,16 +49,46 @@ export async function fetchEmails(): Promise<{
   return request("/mails");
 }
 
-export async function analyzeEmail(): Promise<EmailWithAnalysis> {
-  return request("/mails/analyze");
+export async function analyzeSelectedEmail(email: RawEmail): Promise<EmailWithAnalysis> {
+  return request("/mails/analyze", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
 }
 
-export async function draftEmail(): Promise<EmailWithAnalysis> {
-  return request("/mails/draft");
+export async function draftSelectedEmail(email: RawEmail): Promise<EmailWithAnalysis> {
+  return request("/mails/draft", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
 }
 
 export async function runOrchestrator(
   limit: number = 50,
 ): Promise<OrchestratorReport> {
   return request(`/run?limit=${limit}`, { method: "POST" });
+}
+
+export async function fetchSavedEmailData(emailId: string): Promise<SavedEmailData> {
+  return request(`/mails/${encodeURIComponent(emailId)}/saved`);
+}
+
+export async function saveDraftForEmail(
+  email: RawEmail,
+  draft: EmailDraft,
+): Promise<DraftActionResult> {
+  return request(`/mails/${encodeURIComponent(email.id)}/draft`, {
+    method: "PUT",
+    body: JSON.stringify({ email, draft }),
+  });
+}
+
+export async function sendDraftForEmail(
+  email: RawEmail,
+  draft: EmailDraft,
+): Promise<DraftActionResult> {
+  return request(`/mails/${encodeURIComponent(email.id)}/send`, {
+    method: "POST",
+    body: JSON.stringify({ email, draft }),
+  });
 }

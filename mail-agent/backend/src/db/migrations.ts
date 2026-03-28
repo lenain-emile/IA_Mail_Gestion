@@ -31,8 +31,42 @@ export async function runMigrations(): Promise<void> {
       confiance   TEXT,
       note        TEXT,
       sent        BOOLEAN DEFAULT FALSE,
+      send_in_progress BOOLEAN DEFAULT FALSE,
+      sent_at     TIMESTAMPTZ,
+      gmail_message_id TEXT,
       created_at  TIMESTAMP DEFAULT NOW()
     );
+  `);
+
+  await pool.query(`
+    ALTER TABLE drafts
+    ADD COLUMN IF NOT EXISTS send_in_progress BOOLEAN DEFAULT FALSE;
+  `);
+
+  await pool.query(`
+    ALTER TABLE drafts
+    ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
+  `);
+
+  await pool.query(`
+    ALTER TABLE drafts
+    ADD COLUMN IF NOT EXISTS gmail_message_id TEXT;
+  `);
+
+  await pool.query(`
+    WITH ranked AS (
+      SELECT
+        id,
+        ROW_NUMBER() OVER (
+          PARTITION BY email_id
+          ORDER BY sent DESC, created_at DESC, id DESC
+        ) AS rn
+      FROM drafts
+      WHERE email_id IS NOT NULL
+    )
+    DELETE FROM drafts d
+    USING ranked r
+    WHERE d.id = r.id AND r.rn > 1;
   `);
 
   await pool.query(`
@@ -54,6 +88,10 @@ export async function runMigrations(): Promise<void> {
 
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_drafts_email_id ON drafts(email_id);
+  `);
+
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_drafts_email_id_unique ON drafts(email_id);
   `);
 
   logger.info("[DB] Migrations terminées ✅");
