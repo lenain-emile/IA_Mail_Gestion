@@ -1,4 +1,4 @@
-# IA Mail Gestion - README non-tech
+# IA Mail Gestion README
 
 ## En une phrase
 Cette application aide a traiter des emails entrants plus vite: elle lit les messages, propose une reponse avec l'IA, permet de corriger le brouillon, puis envoie la reponse avec suivi.
